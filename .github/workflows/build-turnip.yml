@@ -74,7 +74,6 @@ jobs:
             -Dgbm=disabled \
             -Dglx=disabled \
             -Dllvm=disabled \
-            -Db_lto=true \
             -Dstrip=true
           ninja -C build-android src/freedreno/vulkan/libvulkan_freedreno.so
 
