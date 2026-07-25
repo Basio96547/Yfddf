@@ -1,0 +1,114 @@
+name: Build Turnip A8xx driver
+
+on:
+  push:
+    branches: [claude/empty-file-m3tm3y]
+    paths: ['.github/workflows/build-turnip.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build bison flex zip
+          pip3 install meson mako pyyaml
+
+      - name: Clone Mesa source (gen8 branch with upstream fallback)
+        id: src
+        run: |
+          set -x
+          if git clone --depth 1 -b turnip/gen8 https://github.com/whitebelyash/mesa.git mesa; then
+            echo "source=whitebelyash/mesa turnip/gen8" >> "$GITHUB_OUTPUT"
+          elif git clone --depth 1 -b turnip/gen8 https://gitlab.freedesktop.org/whitebelyash/mesa.git mesa; then
+            echo "source=gitlab whitebelyash/mesa turnip/gen8" >> "$GITHUB_OUTPUT"
+          else
+            git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git mesa
+            echo "source=mesa/mesa main" >> "$GITHUB_OUTPUT"
+          fi
+          cd mesa
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "mesaver=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Create Android cross file
+        run: |
+          NDK="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          cat > android-aarch64.ini <<EOF
+          [binaries]
+          ar = '$NDK/llvm-ar'
+          c = ['$NDK/aarch64-linux-android31-clang']
+          cpp = ['$NDK/aarch64-linux-android31-clang++', '-fno-exceptions', '-fno-unwind-tables', '-fno-asynchronous-unwind-tables', '-static-libstdc++']
+          c_ld = 'lld'
+          cpp_ld = 'lld'
+          strip = '$NDK/llvm-strip'
+          pkg-config = ['env', 'PKG_CONFIG_LIBDIR=', '/usr/bin/pkg-config']
+
+          [host_machine]
+          system = 'android'
+          cpu_family = 'aarch64'
+          cpu = 'armv8'
+          endian = 'little'
+          EOF
+
+      - name: Build Turnip
+        run: |
+          cd mesa
+          meson setup build-android --cross-file ../android-aarch64.ini \
+            -Dbuildtype=release \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=31 \
+            -Dandroid-stub=true \
+            -Dandroid-libbacktrace=disabled \
+            -Dgallium-drivers= \
+            -Dvulkan-drivers=freedreno \
+            -Dfreedreno-kmds=kgsl \
+            -Degl=disabled \
+            -Dgbm=disabled \
+            -Dglx=disabled \
+            -Dllvm=disabled \
+            -Db_lto=true \
+            -Dstrip=true
+          ninja -C build-android src/freedreno/vulkan/libvulkan_freedreno.so
+
+      - name: Package adrenotools zip
+        run: |
+          mkdir -p pkg
+          cp mesa/build-android/src/freedreno/vulkan/libvulkan_freedreno.so pkg/
+          VKVER=$(grep -oP 'VK_HEADER_VERSION\s+\K[0-9]+' mesa/include/vulkan/vulkan_core.h || echo "?")
+          cat > pkg/meta.json <<EOF
+          {
+            "schemaVersion": 1,
+            "name": "A8XX Turnip CI $(date +%Y%m%d)",
+            "description": "Turnip for Adreno 8xx. Source: ${{ steps.src.outputs.source }} @ ${{ steps.src.outputs.commit }}, Mesa ${{ steps.src.outputs.mesaver }}",
+            "author": "CI build",
+            "packageVersion": "1",
+            "vendor": "Mesa",
+            "driverVersion": "Vulkan 1.4.$VKVER",
+            "minApi": 28,
+            "libraryName": "libvulkan_freedreno.so"
+          }
+          EOF
+          cd pkg && zip -9 ../turnip-a8xx-ci.zip libvulkan_freedreno.so meta.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: turnip-a8xx-ci
+          path: turnip-a8xx-ci.zip
+
+      - name: Commit driver zip to branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cp turnip-a8xx-ci.zip dist-turnip-a8xx.zip
+          git add dist-turnip-a8xx.zip
+          git commit -m "Add CI-built Turnip A8xx driver zip [skip ci]"
+          git push
