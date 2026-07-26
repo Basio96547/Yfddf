@@ -1,0 +1,103 @@
+name: Build Eden optimized for S25 Ultra
+
+on:
+  push:
+    branches: [claude/empty-file-m3tm3y]
+    paths: ['.github/workflows/build-eden.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 6'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk/2[567]* "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache glslang-tools libvulkan-dev zip
+
+      - name: Clone Eden source (mirror fallback)
+        id: src
+        run: |
+          set -x
+          if git clone --depth 1 --recursive https://git.eden-emu.dev/eden-emu/eden.git eden; then
+            echo "source=git.eden-emu.dev/eden-emu/eden" >> "$GITHUB_OUTPUT"
+          else
+            git clone --depth 1 --recursive https://github.com/eden-emu/eden.git eden
+            echo "source=github.com/eden-emu/eden" >> "$GITHUB_OUTPUT"
+          fi
+          cd eden
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure persistent signing keystore
+        run: |
+          if [ ! -f ci-keystore.jks ]; then
+            keytool -genkeypair -v -keystore ci-keystore.jks -alias eden-s25u \
+              -keyalg RSA -keysize 2048 -validity 3650 \
+              -storepass eden-s25u-ci -keypass eden-s25u-ci \
+              -dname "CN=Eden S25U CI"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add ci-keystore.jks
+            git commit -m "Add CI signing keystore [skip ci]"
+            git push
+          fi
+
+      - name: Build Eden APK (Oryon-tuned, with fallbacks)
+        run: |
+          cd eden/src/android
+          chmod +x gradlew
+          build() { ./gradlew --no-daemon assembleMainlineRelease || ./gradlew --no-daemon assembleRelease; }
+          export CFLAGS="-O3 -mcpu=oryon-1" CXXFLAGS="-O3 -mcpu=oryon-1"
+          if ! build; then
+            rm -rf app/.cxx app/build
+            export CFLAGS="-O3" CXXFLAGS="-O3"
+            if ! build; then
+              rm -rf app/.cxx app/build
+              unset CFLAGS CXXFLAGS
+              build
+            fi
+          fi
+          find . -name '*.apk' -not -path '*intermediates*'
+
+      - name: Sign APK
+        run: |
+          APK=$(find eden/src/android -name '*.apk' -not -path '*intermediates*' | head -1)
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/zipalign" -f -p 4 "$APK" eden-s25u-aligned.apk || cp "$APK" eden-s25u-aligned.apk
+          "$BT/apksigner" sign --ks ci-keystore.jks --ks-pass pass:eden-s25u-ci \
+            --out eden-s25u.apk eden-s25u-aligned.apk
+          "$BT/apksigner" verify eden-s25u.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eden-s25u
+          path: eden-s25u.apk
+
+      - name: Publish to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: eden-s25u-latest
+          name: Eden S25 Ultra build (${{ steps.src.outputs.commit }})
+          body: 'Eden built from ${{ steps.src.outputs.source }} @ ${{ steps.src.outputs.commit }} with -O3 CPU tuning for Snapdragon 8 Elite.'
+          files: eden-s25u.apk

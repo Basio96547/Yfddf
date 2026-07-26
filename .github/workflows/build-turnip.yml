@@ -5,6 +5,8 @@ on:
     branches: [claude/empty-file-m3tm3y]
     paths: ['.github/workflows/build-turnip.yml']
   workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 6'
 
 permissions:
   contents: write
