@@ -19,6 +19,9 @@ apply "window filter -> FSR"          "ScalingFilter::Bilinear,"                
 apply "resolution -> 2x"              "ResolutionSetup::Res1X,"                   "ResolutionSetup::Res2X,"
 apply "force max GPU clocks -> on"    "renderer_force_max_clock{linkage, false"   "renderer_force_max_clock{linkage, true"
 apply "async shader compile -> on"    "use_asynchronous_shaders{linkage, false"   "use_asynchronous_shaders{linkage, true"
+apply "VRAM cache -> aggressive"      "VramUsageMode::Conservative,"              "VramUsageMode::Aggressive,"
+apply "console mode -> docked"        "ConsoleMode::Handheld,"                    "ConsoleMode::Docked,"
+apply "anisotropy -> automatic"       "AnisotropyMode::Default,"                  "AnisotropyMode::Automatic,"
 
 echo "--- resulting defaults ---"
-grep -n "ScalingFilter::Fsr,\|ResolutionSetup::Res2X,\|renderer_force_max_clock{linkage, true\|use_asynchronous_shaders{linkage, true" "$H" || true
+grep -n "ScalingFilter::Fsr,\|ResolutionSetup::Res2X,\|renderer_force_max_clock{linkage, true\|use_asynchronous_shaders{linkage, true\|VramUsageMode::Aggressive,\|ConsoleMode::Docked,\|AnisotropyMode::Automatic," "$H" || true
