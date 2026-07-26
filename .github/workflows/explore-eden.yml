@@ -1,0 +1,48 @@
+name: Explore Eden source
+
+on:
+  push:
+    branches: [claude/empty-file-m3tm3y]
+    paths: ['.github/workflows/explore-eden.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  explore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone Eden source
+        run: |
+          git clone --depth 1 https://git.eden-emu.dev/eden-emu/eden.git eden \
+            || git clone --depth 1 https://github.com/eden-emu/eden.git eden
+
+      - name: Dump settings-related sources
+        run: |
+          rm -rf eden-src-dump && mkdir -p eden-src-dump
+          cd eden
+          {
+            find src/android -type f \( -name '*.kt' -o -name '*.xml' \) -path '*settings*' -size -200k
+            find src/android -maxdepth 4 -name 'build.gradle.kts'
+            ls src/common/settings.h src/common/settings.cpp src/common/settings_setting.h 2>/dev/null
+            find src/android -name 'NativeConfig*' -o -name '*Config*.kt' -path '*yuzu*' -size -200k | head -20
+          } | sort -u | while read -r f; do
+            mkdir -p "../eden-src-dump/$(dirname "$f")"
+            cp "$f" "../eden-src-dump/$f"
+          done
+          cd ..
+          du -sh eden-src-dump && find eden-src-dump -type f | wc -l
+
+      - name: Commit dump to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add eden-src-dump
+          git commit -m "Add Eden source dump for settings patching [skip ci]" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME" || true
+          git push
