@@ -23,5 +23,16 @@ apply "VRAM cache -> aggressive"      "VramUsageMode::Conservative,"            
 apply "console mode -> docked"        "ConsoleMode::Handheld,"                    "ConsoleMode::Docked,"
 apply "anisotropy -> automatic"       "AnisotropyMode::Default,"                  "AnisotropyMode::Automatic,"
 
+# Emulated console RAM: 4GB -> 8GB devkit layout. The enum name lives in
+# settings_enums.h, so resolve it from the real source at build time and
+# skip safely if upstream renames it.
+ENUMS="$SRC/src/common/settings_enums.h"
+MEM8=$(grep -oE "Memory_8[A-Za-z0-9]*b" "$ENUMS" 2>/dev/null | head -1)
+if [ -n "$MEM8" ]; then
+  apply "emulated RAM -> 8GB ($MEM8)" "MemoryLayout::Memory_4Gb," "MemoryLayout::$MEM8,"
+else
+  echo "::warning::8GB memory layout enum not found in settings_enums.h, skipped"
+fi
+
 echo "--- resulting defaults ---"
 grep -n "ScalingFilter::Fsr,\|ResolutionSetup::Res2X,\|renderer_force_max_clock{linkage, true\|use_asynchronous_shaders{linkage, true\|VramUsageMode::Aggressive,\|ConsoleMode::Docked,\|AnisotropyMode::Automatic," "$H" || true
