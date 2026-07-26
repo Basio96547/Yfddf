@@ -48,6 +48,9 @@ jobs:
           cd eden
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Apply S25 Ultra source patches
+        run: bash patches/eden-defaults.sh eden
+
       - name: Ensure persistent signing keystore
         run: |
           if [ ! -f ci-keystore.jks ]; then
