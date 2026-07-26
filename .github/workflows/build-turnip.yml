@@ -42,7 +42,10 @@ jobs:
 
       - name: Create Android cross file
         run: |
-          NDK="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          NDKROOT=$(ls -d "$ANDROID_HOME"/ndk/27.* 2>/dev/null | sort -V | tail -1)
+          [ -z "$NDKROOT" ] && NDKROOT="$ANDROID_NDK_LATEST_HOME"
+          echo "Using NDK: $NDKROOT"
+          NDK="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
           cat > android-aarch64.ini <<EOF
           [binaries]
           ar = '$NDK/llvm-ar'
