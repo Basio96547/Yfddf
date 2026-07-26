@@ -28,10 +28,10 @@ jobs:
         id: src
         run: |
           set -x
-          if git clone --depth 1 -b turnip/gen8 https://github.com/whitebelyash/mesa.git mesa; then
-            echo "source=whitebelyash/mesa turnip/gen8" >> "$GITHUB_OUTPUT"
-          elif git clone --depth 1 -b turnip/gen8 https://gitlab.freedesktop.org/whitebelyash/mesa.git mesa; then
-            echo "source=gitlab whitebelyash/mesa turnip/gen8" >> "$GITHUB_OUTPUT"
+          if git clone --depth 1 -b turnip/gen8 https://github.com/whitebelyash/mesa-unified.git mesa; then
+            echo "source=whitebelyash/mesa-unified turnip/gen8" >> "$GITHUB_OUTPUT"
+          elif git clone --depth 1 https://github.com/whitebelyash/mesa-tu8.git mesa; then
+            echo "source=whitebelyash/mesa-tu8" >> "$GITHUB_OUTPUT"
           else
             git clone --depth 1 https://gitlab.freedesktop.org/mesa/mesa.git mesa
             echo "source=mesa/mesa main" >> "$GITHUB_OUTPUT"
