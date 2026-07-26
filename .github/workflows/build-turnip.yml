@@ -21,7 +21,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build bison flex zip
+          sudo apt-get install -y ninja-build bison flex zip glslang-tools
           pip3 install meson mako pyyaml
 
       - name: Clone Mesa source (gen8 branch with upstream fallback)
